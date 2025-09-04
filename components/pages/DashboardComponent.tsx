@@ -1,7 +1,7 @@
 "use client";
+
 import { Inter } from "next/font/google";
 import { useState } from "react";
-// No need to import 'Resolver' when packages are up-to-date
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -39,13 +39,13 @@ const inputDefs = [
   { name: "Bench Width", key: "benchWidth", placeholder: "m", tip: "Horizontal width of a bench.", icon: Ruler },
   { name: "Inter-Ramp Angle", key: "interRampAngle", placeholder: "°", tip: "Angle between benches across ramps.", icon: Mountain },
 ] as const;
-type Key = (typeof inputDefs)[number]["key"];
 
-/* ---------------------------------- ZOD ----------------------------------- */
+/* ---------------------------------- ZOD SCHEMA ----------------------------------- */
 const emptyToUndef = (v: unknown) => (v === "" || v === null ? undefined : v);
 const nonNeg = z.preprocess(emptyToUndef, z.coerce.number().min(0, "Must be ≥ 0").optional());
 const angle = z.preprocess(emptyToUndef, z.coerce.number().min(0, "Must be ≥ 0").max(90, "Must be ≤ 90").optional());
 const ratio01 = z.preprocess(emptyToUndef, z.coerce.number().min(0, "Min 0").max(1, "Max 1").optional());
+
 const schema = z.object({
   rainfall: nonNeg,
   depthToGroundwater: nonNeg,
@@ -62,10 +62,10 @@ const schema = z.object({
   interRampAngle: angle,
 });
 
-// Use z.infer<T> to get the TypeScript type from a schema. It's the standard.
 type FormValues = z.infer<typeof schema>;
 
 /* --------------------------------- STYLES --------------------------------- */
+// Placeholder risk data for visual purposes only
 const riskLevel = "HIGH RISK" as const;
 const riskPercent = 88;
 const riskStyles: Record<
@@ -89,13 +89,13 @@ export function DashboardComponent() {
     watch,
     formState: { errors },
   } = useForm<FormValues>({
-
     resolver: zodResolver(schema),
     defaultValues: {},
     mode: "onBlur",
   });
 
   const onSubmit = handleSubmit((_values) => {
+    // TODO: Send `_values` to the prediction API
     setShowResults(true);
   });
 
@@ -119,6 +119,7 @@ export function DashboardComponent() {
           </div>
         </div>
       </header>
+
       {/* Content */}
       <section className="mx-auto max-w-7xl px-6 py-8">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -191,6 +192,7 @@ export function DashboardComponent() {
                 </div>
               </form>
             </div>
+
             {/* Bulk Analysis (placeholder UI) */}
             <div className="rounded-xl bg-white shadow-md ring-1 ring-slate-200">
               <div className="border-b border-slate-200 p-5">
@@ -225,6 +227,7 @@ export function DashboardComponent() {
               </div>
             </div>
           </div>
+
           {/* Right Column (Results) */}
           <div className="lg:col-span-7">
             <div className="rounded-xl bg-white shadow-md ring-1 ring-slate-200 p-6 min-h-[560px] flex flex-col overflow-hidden">
@@ -272,11 +275,13 @@ export function DashboardComponent() {
                       </div>
                     </div>
                   </div>
+
                   {/* Context strip */}
                   <div className="flex items-center gap-3">
                     <div className="h-1.5 flex-1 rounded-full bg-gradient-to-r from-emerald-500 via-amber-500 to-red-600" />
                     <span className={`text-xs font-semibold ${style.text}`}>Context</span>
                   </div>
+
                   {/* Input Parameters Summary */}
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                     <div className="flex items-center justify-between">
@@ -298,6 +303,7 @@ export function DashboardComponent() {
                       ))}
                     </div>
                   </div>
+
                   {/* Risk Legend */}
                   <div className="rounded-lg border border-slate-200 bg-white p-4">
                     <div className="mb-3 flex items-center gap-2">
