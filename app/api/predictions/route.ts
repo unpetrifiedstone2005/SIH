@@ -3,6 +3,29 @@ import { PrismaClient } from "../../generated/prisma";
 
 const prisma = new PrismaClient();
 
+// Helper function to convert BigInt values to strings for JSON serialization
+function serializeBigInts(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+  
+  if (typeof obj === 'bigint') {
+    return obj.toString();
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(serializeBigInts);
+  }
+  
+  if (typeof obj === 'object') {
+    const serialized: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      serialized[key] = serializeBigInts(value);
+    }
+    return serialized;
+  }
+  
+  return obj;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -25,7 +48,7 @@ export async function GET(req: NextRequest) {
     });
     
     return NextResponse.json({
-      predictions,
+      predictions: serializeBigInts(predictions),
       count: predictions.length
     });
     

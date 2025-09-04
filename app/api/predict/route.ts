@@ -182,8 +182,8 @@ export async function POST(req: NextRequest) {
             features: body.features,
             timestamp: new Date().toISOString(),
             databaseRecord: {
-              predictionId: predictionRecord.id,
-              sensorReadingId: sensorReading.id,
+              predictionId: predictionRecord.id.toString(),
+              sensorReadingId: sensorReading.id.toString(),
               locationId: location.id,
               riskLevel: parsedPrediction.riskLevel,
               riskScore: parsedPrediction.riskScore
