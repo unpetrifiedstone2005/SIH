@@ -89,8 +89,7 @@ export function DashboardComponent() {
     watch,
     formState: { errors },
   } = useForm<FormValues>({
-    // With up-to-date packages, passing the resolver directly works
-    // without any extra typing. TypeScript can now infer the types correctly.
+
     resolver: zodResolver(schema),
     defaultValues: {},
     mode: "onBlur",
