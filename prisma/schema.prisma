@@ -6,7 +6,7 @@
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../app/generated/prisma"
+  output   = "../app/generated/prisma" // FIXME: Adjust this output path to match your project structure.
 }
 
 datasource db {
@@ -14,4 +14,90 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// Enum for the different levels of predicted risk.
+enum RiskLevel {
+  Low
+  Moderate
+  High
+  Critical
 
+  @@map("risk_level_enum")
+}
+
+/// Represents a specific location being monitored, e.g., "North Wall Scenario".
+model MonitoredLocation {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // A location can have many sensor readings and predictions over time.
+  sensorReadings SensorReading[]
+  predictions    Prediction[]
+
+  @@map("monitored_locations")
+}
+
+/// Stores a single time-series data point with all the features from your sensors.
+model SensorReading {
+  id                      BigInt      @id @default(autoincrement())
+  timestamp               DateTime
+  locationId              Int         @map("location_id")
+  // The location this reading belongs to.
+  location                MonitoredLocation @relation(fields: [locationId], references: [id])
+
+  // Your 13 input features for the model.
+  // They are optional to handle cases where a sensor might temporarily fail.
+  rainfall                Float?
+  depthToGroundwater      Float? @map("depth_to_groundwater")
+  poreWaterPressure       Float? @map("pore_water_pressure")
+  surfaceRunoff           Float? @map("surface_runoff")
+  unitWeight              Float? @map("unit_weight")
+  cohesion                Float?
+  internalFrictionAngle   Float? @map("internal_friction_angle")
+  slopeAngle              Float? @map("slope_angle")
+  slopeHeight             Float? @map("slope_height")
+  poreWaterPressureRatio  Float? @map("pore_water_pressure_ratio")
+  benchHeight             Float? @map("bench_height")
+  benchWidth              Float? @map("bench_width")
+  interRampAngle          Float? @map("inter_ramp_angle")
+
+  // Each sensor reading can trigger one prediction.
+  prediction              Prediction?
+
+  @@map("sensor_readings")
+}
+
+/// Stores the output of your AI model for a given location and time.
+model Prediction {
+  id                   BigInt       @id @default(autoincrement())
+  predictionTimestamp  DateTime     @default(now()) @map("prediction_timestamp")
+  riskScore            Float        @map("risk_score")
+  riskLevel            RiskLevel    @map("risk_level")
+
+  locationId           Int          @map("location_id")
+  // The location this prediction is for.
+  location             MonitoredLocation @relation(fields: [locationId], references: [id])
+
+  sourceReadingId      BigInt?      @unique @map("source_reading_id")
+  // The specific sensor reading that was used to generate this prediction (one-to-one relation).
+  sourceReading        SensorReading? @relation(fields: [sourceReadingId], references: [id])
+
+  // A single prediction can trigger multiple alerts if the logic is set up that way.
+  alerts               Alert[]
+
+  @@map("predictions")
+}
+
+/// Logs an alert that is generated when a prediction indicates a high risk level.
+model Alert {
+  id              Int      @id @default(autoincrement())
+  alertTimestamp  DateTime @default(now()) @map("alert_timestamp")
+  message         String
+
+  predictionId    BigInt   @map("prediction_id")
+  // The prediction that triggered this alert.
+  prediction      Prediction @relation(fields: [predictionId], references: [id])
+
+  @@map("alerts")
+}
