@@ -20,7 +20,7 @@ import {
 
 const inter = Inter({ subsets: ["latin"] });
 
-export default function Page() {
+export function DashboardComponent() {
   const [showResults, setShowResults] = useState(false);
 
   // Placeholder risk data for visual purposes only

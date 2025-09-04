@@ -74,6 +74,7 @@ model Prediction {
   predictionTimestamp  DateTime     @default(now()) @map("prediction_timestamp")
   riskScore            Float        @map("risk_score")
   riskLevel            RiskLevel    @map("risk_level")
+  contributingFactors  Json?        @map("contributing_factors")
 
   locationId           Int          @map("location_id")
   // The location this prediction is for.
