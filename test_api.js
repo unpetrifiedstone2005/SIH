@@ -24,6 +24,36 @@ async function testAPI() {
     if (response.ok) {
       console.log('✅ API test successful!');
       console.log('Prediction:', result.prediction);
+      
+      if (result.databaseRecord) {
+        console.log('📊 Database Record Created:');
+        console.log('  - Prediction ID:', result.databaseRecord.predictionId);
+        console.log('  - Sensor Reading ID:', result.databaseRecord.sensorReadingId);
+        console.log('  - Location ID:', result.databaseRecord.locationId);
+        console.log('  - Risk Level:', result.databaseRecord.riskLevel);
+        console.log('  - Risk Score:', result.databaseRecord.riskScore + '%');
+      }
+      
+      // Test fetching predictions
+      console.log('\n🔍 Testing predictions retrieval...');
+      const predictionsResponse = await fetch('http://localhost:3000/api/predictions?limit=5');
+      const predictionsData = await predictionsResponse.json();
+      
+      if (predictionsResponse.ok) {
+        console.log('✅ Predictions retrieved successfully!');
+        console.log('Total predictions:', predictionsData.count);
+        if (predictionsData.predictions.length > 0) {
+          console.log('Latest prediction:', {
+            id: predictionsData.predictions[0].id,
+            riskLevel: predictionsData.predictions[0].riskLevel,
+            riskScore: predictionsData.predictions[0].riskScore,
+            timestamp: predictionsData.predictions[0].predictionTimestamp
+          });
+        }
+      } else {
+        console.log('❌ Failed to retrieve predictions');
+      }
+      
     } else {
       console.log('❌ API test failed');
     }
