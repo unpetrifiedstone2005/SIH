@@ -67,7 +67,7 @@ async function getDefaultLocation() {
   return location;
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const body = await req.json();
 
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     // Get the absolute path to the predict.py script
     const scriptPath = path.join(process.cwd(), "ml", "predict.py");
 
-    return new Promise((resolve, reject) => {
+    return new Promise<NextResponse>((resolve, reject) => {
       // Spawn Python process with the features as arguments
       const pythonCommand = process.platform === "win32" ? "python" : "python3";
       const py = spawn(pythonCommand, [

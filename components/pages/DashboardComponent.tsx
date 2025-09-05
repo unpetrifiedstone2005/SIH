@@ -19,7 +19,9 @@ import {
   Activity,
   Droplets,
   TriangleAlert,
+  Loader2,
 } from "lucide-react";
+import CSVUpload, { ParsedCSVData } from "../CSVUpload";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -38,7 +40,7 @@ const inputDefs = [
   { name: "Bench Height", key: "benchHeight", placeholder: "m", tip: "Vertical dimension of a bench.", icon: Ruler },
   { name: "Bench Width", key: "benchWidth", placeholder: "m", tip: "Horizontal width of a bench.", icon: Ruler },
   { name: "Inter-Ramp Angle", key: "interRampAngle", placeholder: "°", tip: "Angle between benches across ramps.", icon: Mountain },
-] as const;
+];
 
 /* ---------------------------------- ZOD SCHEMA ----------------------------------- */
 const emptyToUndef = (v: unknown) => (v === "" || v === null ? undefined : v);
@@ -81,6 +83,10 @@ const style = riskStyles[riskLevel];
 /* -------------------------------- COMPONENT -------------------------------- */
 export function DashboardComponent() {
   const [showResults, setShowResults] = useState(false);
+  const [csvData, setCsvData] = useState<ParsedCSVData | null>(null);
+  const [bulkResults, setBulkResults] = useState<any[]>([]);
+  const [isProcessingBulk, setIsProcessingBulk] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   const {
     register,
@@ -94,10 +100,63 @@ export function DashboardComponent() {
     mode: "onBlur",
   });
 
-  const onSubmit = handleSubmit((_values) => {
+  const onSubmit = handleSubmit((_values: any) => {
     // TODO: Send `_values` to the prediction API
     setShowResults(true);
   });
+
+  // Handle CSV data from the upload component
+  const handleCSVDataParsed = (data: ParsedCSVData | null) => {
+    setCsvData(data);
+    setBulkError(null);
+    setBulkResults([]);
+  };
+
+  // Process bulk predictions
+  const processBulkPredictions = async () => {
+    if (!csvData || csvData.rows.length === 0) return;
+
+    setIsProcessingBulk(true);
+    setBulkError(null);
+    setBulkResults([]);
+
+    try {
+      // Convert CSV rows to feature arrays
+      const featureRows = csvData.rows.map((row: { [x: string]: any; }) => {
+        return inputDefs.map(field => {
+          const value = row[field.key];
+          return typeof value === 'number' ? value : 0;
+        });
+      });
+
+      // Send to bulk prediction API
+      const response = await fetch('/api/predict/bulk', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ rows: featureRows }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Bulk prediction failed');
+      }
+
+      setBulkResults(result.results || []);
+      setShowResults(true);
+
+      if (result.errors && result.errors.length > 0) {
+        setBulkError(`Some predictions failed: ${result.errors.length} errors`);
+      }
+
+    } catch (error) {
+      setBulkError(error instanceof Error ? error.message : 'Failed to process bulk predictions');
+    } finally {
+      setIsProcessingBulk(false);
+    }
+  };
 
   const values = watch();
 
@@ -112,10 +171,7 @@ export function DashboardComponent() {
               <h1 className="text-2xl font-bold tracking-tight">Rockfall Risk Prediction Dashboard</h1>
               <p className="mt-1 text-sm text-slate-600">High-fidelity interface for geotechnical analysis and safety planning.</p>
             </div>
-            <div className="hidden md:flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-inset ring-slate-200">
-              <GaugeIcon className="h-4 w-4 text-slate-500" aria-hidden />
-              <span className="text-xs text-slate-600">Design prototype — logic not implemented</span>
-            </div>
+            
           </div>
         </div>
       </header>
@@ -142,7 +198,7 @@ export function DashboardComponent() {
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {inputDefs.map((field) => {
                     const Icon = field.icon || InfoIcon;
-                    const err = errors[field.key];
+                    const err = errors[field.key as keyof FormValues];
                     return (
                       <div key={field.key} className="space-y-1.5">
                         <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700">
@@ -159,7 +215,7 @@ export function DashboardComponent() {
                             className={`w-full rounded-lg border bg-white px-3 py-2 pr-14 text-sm outline-none ring-blue-200 transition focus:ring-2 ${
                               err ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-slate-300 focus:border-slate-300"
                             }`}
-                            {...register(field.key)}
+                            {...register(field.key as keyof FormValues)}
                           />
                           <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-xs text-slate-400">
                             {field.placeholder}
@@ -193,37 +249,49 @@ export function DashboardComponent() {
               </form>
             </div>
 
-            {/* Bulk Analysis (placeholder UI) */}
+            {/* Bulk Analysis (CSV Upload) */}
             <div className="rounded-xl bg-white shadow-md ring-1 ring-slate-200">
               <div className="border-b border-slate-200 p-5">
                 <h2 className="text-lg font-semibold">Bulk Analysis</h2>
                 <p className="mt-1 text-sm text-slate-500">Upload a CSV to evaluate multiple records at once.</p>
               </div>
               <div className="p-5">
-                <label
-                  htmlFor="csv-upload"
-                  className="group relative flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center transition hover:bg-slate-100 focus-within:border-blue-400 focus-within:bg-blue-50/40"
-                >
-                  <div className="absolute -top-3 left-4 rounded-md bg-white px-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                    CSV Upload
+                <CSVUpload
+                  onDataParsed={handleCSVDataParsed}
+                  expectedFields={inputDefs}
+                  maxFileSize={10}
+                />
+                
+                {/* Bulk Processing Button */}
+                {csvData && csvData.rows.length > 0 && (
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={processBulkPredictions}
+                      disabled={isProcessingBulk}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-green-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isProcessingBulk ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                          Processing {csvData.rows.length} records...
+                        </>
+                      ) : (
+                        <>
+                          <Activity className="h-4 w-4" aria-hidden />
+                          Process {csvData.rows.length} Records
+                        </>
+                      )}
+                    </button>
                   </div>
-                  <UploadCloud className="h-9 w-9 text-slate-500 group-hover:text-slate-600" aria-hidden />
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Drag & drop your CSV here, or click to browse</p>
-                    <p className="text-xs text-slate-500">Max size 10MB • .csv only</p>
+                )}
+
+                {/* Bulk Error Display */}
+                {bulkError && (
+                  <div className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                    {bulkError}
                   </div>
-                  <input id="csv-upload" type="file" accept=".csv" className="hidden" />
-                </label>
-                <div className="mt-4 flex items-center justify-between">
-                  <button type="button" className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700">
-                    <FileSpreadsheet className="h-4 w-4" aria-hidden />
-                    Download CSV Template
-                  </button>
-                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <FileUp className="h-4 w-4" aria-hidden />
-                    <span>Bulk import for batch predictions</span>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </div>
@@ -251,30 +319,112 @@ export function DashboardComponent() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {/* Top: Risk Level and Score */}
-                  <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
-                    <div className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${style.chip}`}>
-                      <span className="h-2 w-2 rounded-full bg-white/90" />
-                      {riskLevel}
-                    </div>
-                    {/* Radial Gauge */}
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`relative h-28 w-28 rounded-full ring-4 ${style.ring}`}
-                        aria-label="Risk probability gauge"
-                        style={{ background: `conic-gradient(${style.gaugeFrom} ${riskPercent * 3.6}deg, #e2e8f0 0deg)` }}
-                      >
-                        <div className="absolute inset-2 rounded-full bg-white" />
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-2xl font-bold">{riskPercent}%</span>
+                  {/* Bulk Results Summary */}
+                  {bulkResults.length > 0 && (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-base font-semibold">Bulk Analysis Results</h4>
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                          <FileSpreadsheet className="h-4 w-4" aria-hidden />
+                          <span>{bulkResults.length} predictions completed</span>
                         </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium">Probability</p>
-                        <p className="text-xs text-slate-500">Estimated likelihood of rockfall</p>
+                      
+                      {/* Risk Level Distribution */}
+                      <div className="grid grid-cols-4 gap-3 text-sm">
+                        {['Low', 'Moderate', 'High', 'Critical'].map(level => {
+                          const count = bulkResults.filter(r => r.databaseRecord.riskLevel === level).length;
+                          const percentage = bulkResults.length > 0 ? (count / bulkResults.length * 100).toFixed(1) : '0';
+                          return (
+                            <div key={level} className="text-center">
+                              <div className="text-lg font-bold text-slate-800">{count}</div>
+                              <div className="text-xs text-slate-500">{level}</div>
+                              <div className="text-xs text-slate-400">{percentage}%</div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                  </div>
+                  )}
+
+                  {/* Single Prediction Display */}
+                  {bulkResults.length === 0 && (
+                    <>
+                      {/* Top: Risk Level and Score */}
+                      <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+                        <div className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${style.chip}`}>
+                          <span className="h-2 w-2 rounded-full bg-white/90" />
+                          {riskLevel}
+                        </div>
+                        {/* Radial Gauge */}
+                        <div className="flex items-center gap-4">
+                          <div
+                            className={`relative h-28 w-28 rounded-full ring-4 ${style.ring}`}
+                            aria-label="Risk probability gauge"
+                            style={{ background: `conic-gradient(${style.gaugeFrom} ${riskPercent * 3.6}deg, #e2e8f0 0deg)` }}
+                          >
+                            <div className="absolute inset-2 rounded-full bg-white" />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="text-2xl font-bold">{riskPercent}%</span>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">Probability</p>
+                            <p className="text-xs text-slate-500">Estimated likelihood of rockfall</p>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Bulk Results Table */}
+                  {bulkResults.length > 0 && (
+                    <div className="rounded-lg border border-slate-200 bg-white">
+                      <div className="border-b border-slate-200 p-4">
+                        <h4 className="text-base font-semibold">Detailed Results</h4>
+                      </div>
+                      <div className="max-h-64 overflow-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-medium text-slate-600">Row</th>
+                              <th className="px-3 py-2 text-left font-medium text-slate-600">Risk Level</th>
+                              <th className="px-3 py-2 text-left font-medium text-slate-600">Score</th>
+                              <th className="px-3 py-2 text-left font-medium text-slate-600">Top Factor</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {bulkResults.slice(0, 10).map((result, index) => (
+                              <tr key={index} className="border-t border-slate-100">
+                                <td className="px-3 py-2 font-medium text-slate-500">{result.row}</td>
+                                <td className="px-3 py-2">
+                                  <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                                    result.databaseRecord.riskLevel === 'Low' ? 'bg-emerald-100 text-emerald-800' :
+                                    result.databaseRecord.riskLevel === 'Moderate' ? 'bg-amber-100 text-amber-800' :
+                                    result.databaseRecord.riskLevel === 'High' ? 'bg-red-100 text-red-800' :
+                                    'bg-red-200 text-red-900'
+                                  }`}>
+                                    {result.databaseRecord.riskLevel}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 font-medium text-slate-700">
+                                  {result.databaseRecord.riskScore.toFixed(1)}%
+                                </td>
+                                <td className="px-3 py-2 text-slate-600">
+                                  {result.databaseRecord.contributingFactors[0]?.factor || 'N/A'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {bulkResults.length > 10 && (
+                          <div className="p-3 text-xs text-slate-500 text-center border-t border-slate-100">
+                            Showing first 10 of {bulkResults.length} results
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Context strip */}
                   <div className="flex items-center gap-3">
@@ -298,7 +448,7 @@ export function DashboardComponent() {
                       {inputDefs.map((f) => (
                         <div key={`summary-${f.key}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
                           <p className="text-[11px] uppercase tracking-wide text-slate-500">{f.name}</p>
-                          <p className="mt-0.5 text-sm font-medium text-slate-800">{values[f.key] ?? "—"}</p>
+                          <p className="mt-0.5 text-sm font-medium text-slate-800">{values[f.key as keyof FormValues] ?? "—"}</p>
                         </div>
                       ))}
                     </div>
@@ -328,9 +478,6 @@ export function DashboardComponent() {
                 </div>
               )}
             </div>
-            <p className="mt-3 text-xs text-slate-500">
-              Note: This is a design prototype. Calculations, CSV parsing, and state management are intentionally not implemented.
-            </p>
           </div>
         </div>
       </section>
